@@ -1,0 +1,40 @@
+venv/
+.venv/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Python cache and artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Logs and runtime files
+*.log
+*.pid
+
+# Database / local state
+*.sqlite3
+
+# Frontend dependencies and build output
+node_modules/
+dist/
+build/
+.next/
+
+# IDE/editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
