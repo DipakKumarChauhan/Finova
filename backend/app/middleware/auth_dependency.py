@@ -44,8 +44,6 @@ def get_current_user(
     """
 
     token = credentials.credentials
-    print("[DIAG] Validating access token")
-    print("[DIAG] Authorization bearer token present:", bool(token))
 
     try:
         # Decode JWT using secret key and algorithm from settings
@@ -53,19 +51,13 @@ def get_current_user(
         # Support both token formats during transition: 'sub' (standard) or 'user_id'
         user_id = payload.get("sub") or payload.get("user_id")
 
-        print("[DIAG] Access token decoded successfully")
-        print("[DIAG] Access token subject/user_id:", user_id)
-
         if user_id is None:
-            print("[DIAG] Access token missing subject/user_id")
             raise HTTPException(status_code=401, detail="Invalid token")
 
     except ExpiredSignatureError:
-        print("[DIAG] Token expired")
         raise HTTPException(status_code=401, detail="Token expired")
     except JWTError:
         # Token validation failed (expired, signature invalid, malformed, etc.)
-        print("[DIAG] Access token validation failed with JWTError")
         raise HTTPException(status_code=401, detail="Invalid token")
 
     # Load user from database to verify they still exist
@@ -73,9 +65,6 @@ def get_current_user(
 
     if not user:
         # User was deleted or never existed
-        print("[DIAG] User not found for token subject")
         raise HTTPException(status_code=401, detail="User not found")
-
-    print("[DIAG] Auth dependency resolved user:", user.email)
 
     return user

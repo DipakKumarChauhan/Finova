@@ -37,6 +37,29 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
 
 
+def _resolve_cookie_settings(request: Request) -> tuple[bool, str]:
+    origin = (request.headers.get("origin") or "").lower()
+    forwarded_proto = (
+        (request.headers.get("x-forwarded-proto") or request.url.scheme)
+        .split(",")[0]
+        .strip()
+        .lower()
+    )
+    is_local_origin = origin.startswith("http://localhost") or origin.startswith("http://127.0.0.1")
+
+    secure = settings.COOKIE_SECURE or settings.ENVIRONMENT == "production" or forwarded_proto == "https"
+    samesite = settings.COOKIE_SAMESITE if settings.COOKIE_SAMESITE in {"lax", "strict", "none"} else ""
+
+    if not samesite:
+        samesite = "none" if secure and not is_local_origin else "lax"
+
+    # Browsers reject SameSite=None without Secure.
+    if samesite == "none" and not secure:
+        samesite = "lax"
+
+    return secure, samesite
+
+
 @router.post("/register")
 def register(data: RegisterRequest, db: Session = Depends(get_db)):
     """
@@ -66,7 +89,7 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(data: LoginRequest, response: Response, db: Session = Depends(get_db)):
+def login(data: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     """
     Authenticate user and receive JWT tokens.
 
@@ -94,6 +117,7 @@ def login(data: LoginRequest, response: Response, db: Session = Depends(get_db))
 
     # JWT tokens generate karte hain (access + refresh)
     access_token, refresh_token = create_tokens(db, user)
+    cookie_secure, cookie_samesite = _resolve_cookie_settings(request)
 
     # Set refresh token as HttpOnly cookie
     response.set_cookie(
@@ -101,8 +125,8 @@ def login(data: LoginRequest, response: Response, db: Session = Depends(get_db))
         value=refresh_token,
         max_age=86400 * 2,  # 2 days
         httponly=True,
-        secure=settings.COOKIE_SECURE or settings.ENVIRONMENT == "production",
-        samesite=settings.COOKIE_SAMESITE,
+        secure=cookie_secure,
+        samesite=cookie_samesite,
     )
 
     logger.info("User logged in: %s", user.email)
@@ -138,26 +162,20 @@ def refresh_tokens(
         HTTPException 401: if refresh token is invalid or expired
     """
     logger.info("Refresh token request received")
-    print("[DIAG] Refresh token request received")
     refresh_token = (data.refresh_token if data and data.refresh_token else None) or (
         request.cookies.get("refresh_token") if request else None
     )
 
-    print("[DIAG] Refresh token present in request/cookie:", bool(refresh_token))
-
     if not refresh_token:
-        print("[DIAG] Refresh token missing")
         raise HTTPException(status_code=401, detail="Missing refresh token")
 
     result = refresh_access_token(db, refresh_token)
 
     if not result:
-        print("[DIAG] Refresh token validation failed")
         raise HTTPException(status_code=401, detail="Invalid refresh token")
 
-    print("[DIAG] Refresh token validated successfully")
-
     access_token, refresh_token = result
+    cookie_secure, cookie_samesite = _resolve_cookie_settings(request)
 
     # Set new refresh token as HttpOnly cookie
     response.set_cookie(
@@ -165,8 +183,8 @@ def refresh_tokens(
         value=refresh_token,
         max_age=86400 * 2,  # 2 days
         httponly=True,
-        secure=settings.COOKIE_SECURE or settings.ENVIRONMENT == "production",
-        samesite=settings.COOKIE_SAMESITE,
+        secure=cookie_secure,
+        samesite=cookie_samesite,
     )
 
     return {
@@ -195,6 +213,7 @@ def logout(
         dict with success message
     """
     logger.info("Logout request received")
+    cookie_secure, cookie_samesite = _resolve_cookie_settings(request)
     refresh_token = (data.refresh_token if data and data.refresh_token else None) or (
         request.cookies.get("refresh_token") if request else None
     )
@@ -206,8 +225,8 @@ def logout(
     response.delete_cookie(
         key="refresh_token",
         httponly=True,
-        secure=settings.COOKIE_SECURE or settings.ENVIRONMENT == "production",
-        samesite=settings.COOKIE_SAMESITE,
+        secure=cookie_secure,
+        samesite=cookie_samesite,
     )
 
     return {"message": "logged out"}
