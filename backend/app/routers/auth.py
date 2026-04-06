@@ -138,17 +138,24 @@ def refresh_tokens(
         HTTPException 401: if refresh token is invalid or expired
     """
     logger.info("Refresh token request received")
+    print("[DIAG] Refresh token request received")
     refresh_token = (data.refresh_token if data and data.refresh_token else None) or (
         request.cookies.get("refresh_token") if request else None
     )
 
+    print("[DIAG] Refresh token present in request/cookie:", bool(refresh_token))
+
     if not refresh_token:
+        print("[DIAG] Refresh token missing")
         raise HTTPException(status_code=401, detail="Missing refresh token")
 
     result = refresh_access_token(db, refresh_token)
 
     if not result:
+        print("[DIAG] Refresh token validation failed")
         raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    print("[DIAG] Refresh token validated successfully")
 
     access_token, refresh_token = result
 

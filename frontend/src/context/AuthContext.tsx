@@ -84,19 +84,31 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const bootstrapAuth = async () => {
       const storedEmail = localStorage.getItem('auth_user_email')
 
+      console.log('[DIAG] Auth Init - access token:', localStorage.getItem('access_token'))
+      console.log('[DIAG] Auth Init - refresh token:', localStorage.getItem('refresh_token'))
+      console.log('[DIAG] Auth Init - stored email:', storedEmail)
+      console.log('[DIAG] Auth Init - in-memory access token present:', Boolean(getAccessToken()))
+      console.log('[DIAG] Auth Init - restoring auth state')
+
       if (!getAccessToken() && storedEmail) {
         try {
+          console.log('[DIAG] Auth Init - attempting refresh access token')
           const refreshed = await refreshAccessToken()
           setAccessTokenState(refreshed.access_token)
           setUser({ email: storedEmail })
+          console.log('[DIAG] Auth Init - authentication state restored successfully')
         } catch {
+          console.log('[DIAG] Auth Init - refresh failed, clearing persisted auth state')
           localStorage.removeItem('auth_user_email')
           setAccessTokenState(null)
           setUser(null)
         }
+      } else {
+        console.log('[DIAG] Auth Init - no refresh needed during bootstrap')
       }
 
       setIsAuthLoading(false)
+      console.log('[DIAG] Auth Init - completed, isAuthenticated:', Boolean(getAccessToken()))
     }
 
     void bootstrapAuth()

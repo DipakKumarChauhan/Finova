@@ -52,21 +52,35 @@ const api = axios.create({
 })
 
 api.interceptors.request.use((config) => {
+  const tokenPreview = accessToken ? `${accessToken.slice(0, 20)}...` : 'none'
+
+  console.log('[DIAG] API Request URL:', config.url)
+  console.log('[DIAG] API Request Auth Header Present:', Boolean(accessToken))
+  console.log('[DIAG] API Request Access Token Preview:', tokenPreview)
+
   if (accessToken) {
     config.headers.Authorization = `Bearer ${accessToken}`
   }
+
+  console.log('[DIAG] API Request Authorization Header:', config.headers?.Authorization ?? 'missing')
 
   return config
 })
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log('[DIAG] API Response status:', response.status, 'for', response.config?.url)
+    return response
+  },
   async (error) => {
     const status = error?.response?.status
     const originalRequest = error?.config as (typeof error.config & RetryableConfig) | undefined
     const requestUrl: string = originalRequest?.url ?? ''
 
+    console.log('[DIAG] API Error status:', status ?? 'unknown', 'for', requestUrl)
+
     if (status === 401) {
+      console.log('[DIAG] 401 detected, attempting refresh flow check')
       console.debug('[auth] 401 response received for', requestUrl)
     }
 
@@ -85,23 +99,27 @@ api.interceptors.response.use(
     originalRequest._retry = true
 
     try {
+      console.log('[DIAG] Refresh token logic triggered')
       console.debug('[auth] attempting refresh token flow')
       refreshPromise ??= refreshSession()
       const refreshedToken = await refreshPromise
       refreshPromise = null
 
       if (!refreshedToken) {
+        console.log('[DIAG] Refresh flow returned no token')
         console.warn('[auth] refresh token flow returned no access token')
         clearStoredSession()
         return Promise.reject(error)
       }
 
+      console.log('[DIAG] Refresh flow succeeded, retrying request')
       console.debug('[auth] refresh succeeded, retrying original request')
       originalRequest.headers = originalRequest.headers ?? {}
       originalRequest.headers.Authorization = `Bearer ${refreshedToken}`
 
       return api(originalRequest)
     } catch (refreshError) {
+      console.log('[DIAG] Refresh flow failed')
       console.warn('[auth] refresh token flow failed, clearing session')
       refreshPromise = null
       clearStoredSession()
