@@ -56,6 +56,11 @@ function RouteFallback() {
 
 function AnimatedRoutes() {
   const location = useLocation()
+  const { isAuthLoading } = useAuth()
+
+  if (isAuthLoading) {
+    return <AuthLoadingScreen />
+  }
 
   return (
     <Suspense fallback={<RouteFallback />}>
@@ -80,7 +85,7 @@ function AnimatedRoutes() {
           />
           <Route element={<ProtectedRoute />}>
             <Route element={<DashboardLayout />}>
-              <Route index element={<Navigate to="/dashboard" replace />} />
+              <Route index element={<Dashboard />} />
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="records" element={<Records />} />
               <Route path="members" element={<Members />} />
