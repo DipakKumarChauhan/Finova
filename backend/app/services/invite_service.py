@@ -173,6 +173,11 @@ def respond_to_invite(db: Session, invite_id, user, action):
     if invite.status != "pending":
         raise HTTPException(400, "Invite is not pending")
 
+    organization = db.query(Organization).filter(
+        Organization.id == invite.organization_id
+    ).first()
+    organization_name = organization.name if organization else str(invite.organization_id)
+
     # ----------------------
     # Invite Rejection Flow
     # ----------------------
@@ -188,7 +193,7 @@ def respond_to_invite(db: Session, invite_id, user, action):
             invite.invited_by,
             message=(
                 f"{user.email} rejected the invite to join organization "
-                f"{invite.organization_id}"
+                f"{organization_name}"
             ),
         )
 
@@ -231,7 +236,7 @@ def respond_to_invite(db: Session, invite_id, user, action):
         invite.invited_by,
         message=(
             f"{user.email} accepted the invite to join organization "
-            f"{invite.organization_id}"
+            f"{organization_name}"
         ),
     )
 

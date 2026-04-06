@@ -18,6 +18,7 @@ from fastapi import HTTPException
 
 from app.core.roles import ROLES, Role
 from app.models.membership import OrganizationMembership
+from app.models.organization import Organization
 from app.models.user import User
 from app.services.notification_service import create_notification
 
@@ -173,12 +174,15 @@ def remove_member(db: Session, organization_id, email):
     if not membership:
         raise HTTPException(status_code=404, detail="Membership not found")
 
+    organization = db.query(Organization).filter(Organization.id == organization_id).first()
+    organization_name = organization.name if organization else str(organization_id)
+
     # Notify user of removal
     # User ko batate hain ki unka membership revoke ho gaya
     create_notification(
         db,
         user.id,
-        f"Your membership was revoked from organization {organization_id}",
+        f"Your membership was revoked from organization {organization_name}",
     )
 
     # Hard delete membership (unlike financial records which are soft-deleted)

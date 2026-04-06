@@ -28,16 +28,15 @@ from app.schemas.record import RecordCreate, RecordUpdate, RecordResponse
 from app.services import record_service
 from app.middleware.rbac import require_role
 from app.middleware.auth_dependency import get_current_user
+from app.services.membership_services import get_membership
 
 router = APIRouter(prefix="/records", tags=["records"])
 
-@router.post("/", response_model=RecordResponse)
+@router.post("", response_model=RecordResponse)
 def create_record(
     data: RecordCreate,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user),
-    # Only admin can create records
-    membership = Depends(require_role(Role.admin))
 ):
     """
     Create a new financial record.
@@ -54,16 +53,22 @@ def create_record(
         RecordResponse with created record details
     """
 
+    membership = get_membership(db, current_user.id, data.organization_id)
+
+    member_role = membership.role.value if hasattr(membership.role, "value") else membership.role
+    if member_role != Role.admin.value:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
     record = record_service.create_record(db, data, current_user.id)
 
     return record
 
-@router.get("/")
+@router.get("")
 def list_records(
     org_id: UUID,
     start_date: str = None,
     end_date: str = None,
-    category: UUID = None,
+    category: str = None,
     transaction_type: str = None,
     limit: int = 50,
     offset: int = 0,
@@ -124,7 +129,7 @@ def export_records(
     org_id: UUID,
     start_date: str = None,
     end_date: str = None,
-    category: UUID = None,
+    category: str = None,
     transaction_type: str = None,
     limit: int = 50,
     offset: int = 0,
@@ -218,7 +223,7 @@ def get_record(
         HTTPException 404: if record not found
     """
 
-    record = record_service.get_record(db, record_id, organization_id)
+    record = record_service.get_record_with_category(db, record_id, organization_id)
 
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")

@@ -11,14 +11,29 @@ Tokens are JWT signed with JWT_SECRET_KEY.
 Access tokens used for API requests. Refresh tokens used to obtain new access tokens.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.schemas.auth import RegisterRequest, LoginRequest, TokenResponse
-from app.services.auth_service import register_user, authenticate_user, create_tokens
+from app.schemas.auth import (
+    RegisterRequest,
+    LoginRequest,
+    TokenResponse,
+    RefreshRequest,
+    LogoutRequest,
+)
+from app.services.auth_service import (
+    register_user,
+    authenticate_user,
+    create_tokens,
+    refresh_access_token,
+    revoke_refresh_token,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/register")
@@ -50,20 +65,21 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(data: LoginRequest, db: Session = Depends(get_db)):
+def login(data: LoginRequest, response: Response, db: Session = Depends(get_db)):
     """
     Authenticate user and receive JWT tokens.
 
-    Validates email/password combination and returns access + refresh tokens.
+    Validates email/password combination and returns access token + refresh token.
     Access token used for subsequent API requests in Authorization header.
-    Refresh token used to obtain new access token when expired.
+    Refresh token stored as HttpOnly cookie for security.
 
     Args:
         data: LoginRequest with email and password
         db: Database session
+        response: Response object to set cookie
 
     Returns:
-        TokenResponse with access_token and refresh_token
+        TokenResponse with access_token (refresh_token omitted from response)
 
     Raises:
         HTTPException 401: if invalid email or password
@@ -78,7 +94,112 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     # JWT tokens generate karte hain (access + refresh)
     access_token, refresh_token = create_tokens(db, user)
 
+    # Set refresh token as HttpOnly cookie
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        max_age=86400 * 2,  # 2 days
+        httponly=True,
+        secure=False,  # Set to True in production with HTTPS
+        samesite="lax",
+    )
+
+    logger.info("User logged in: %s", user.email)
+
     return {
         "access_token": access_token,
-        "refresh_token": refresh_token
+        "refresh_token": refresh_token  # Still return for backwards compatibility, but client ignores it
     }
+
+
+@router.post("/refresh", response_model=TokenResponse)
+def refresh_tokens(
+    data: RefreshRequest | None = None,
+    *,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """
+    Refresh access token using refresh token from HttpOnly cookie.
+
+    Validates refresh token, generates new token pair, and sets new refresh token cookie.
+
+    Args:
+        data: RefreshRequest (may contain refresh_token for backwards compatibility)
+        db: Database session
+        response: Response object to set new cookie
+
+    Returns:
+        TokenResponse with new access_token
+
+    Raises:
+        HTTPException 401: if refresh token is invalid or expired
+    """
+    logger.info("Refresh token request received")
+    refresh_token = (data.refresh_token if data and data.refresh_token else None) or (
+        request.cookies.get("refresh_token") if request else None
+    )
+
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="Missing refresh token")
+
+    result = refresh_access_token(db, refresh_token)
+
+    if not result:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    access_token, refresh_token = result
+
+    # Set new refresh token as HttpOnly cookie
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        max_age=86400 * 2,  # 2 days
+        httponly=True,
+        secure=False,  # Set to True in production with HTTPS
+        samesite="lax",
+    )
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,  # Still return for backwards compatibility
+    }
+
+
+@router.post("/logout")
+def logout(
+    data: LogoutRequest | None = None,
+    *,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """
+    Logout user by revoking refresh token and clearing cookie.
+
+    Args:
+        data: LogoutRequest with refresh_token
+        db: Database session
+        response: Response object to clear cookie
+
+    Returns:
+        dict with success message
+    """
+    logger.info("Logout request received")
+    refresh_token = (data.refresh_token if data and data.refresh_token else None) or (
+        request.cookies.get("refresh_token") if request else None
+    )
+
+    if refresh_token:
+        revoke_refresh_token(db, refresh_token)
+
+    # Clear the refresh token cookie
+    response.delete_cookie(
+        key="refresh_token",
+        httponly=True,
+        secure=False,
+        samesite="lax",
+    )
+
+    return {"message": "logged out"}
