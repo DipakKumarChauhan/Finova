@@ -30,20 +30,6 @@ function AuthLoadingScreen() {
   )
 }
 
-function RootRoute() {
-  const { isAuthenticated, isAuthLoading } = useAuth()
-
-  if (isAuthLoading) {
-    return <AuthLoadingScreen />
-  }
-
-  if (isAuthenticated) {
-    return <Navigate to="/dashboard" replace />
-  }
-
-  return <Home />
-}
-
 function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isAuthLoading } = useAuth()
 
@@ -75,7 +61,7 @@ function AnimatedRoutes() {
     <Suspense fallback={<RouteFallback />}>
       <AnimatePresence mode="wait">
         <Routes location={location} key={location.pathname}>
-          <Route path="/" element={<RootRoute />} />
+          <Route path="/" element={<Home />} />
           <Route
             path="/login"
             element={
@@ -92,19 +78,15 @@ function AnimatedRoutes() {
               </PublicOnlyRoute>
             }
           />
-          <Route
-            element={
-              <ProtectedRoute>
-                <DashboardLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="records" element={<Records />} />
-            <Route path="members" element={<Members />} />
-            <Route path="invites" element={<Invites />} />
-            <Route path="notifications" element={<Notifications />} />
+          <Route element={<ProtectedRoute />}>
+            <Route element={<DashboardLayout />}>
+              <Route index element={<Navigate to="/dashboard" replace />} />
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="records" element={<Records />} />
+              <Route path="members" element={<Members />} />
+              <Route path="invites" element={<Invites />} />
+              <Route path="notifications" element={<Notifications />} />
+            </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
