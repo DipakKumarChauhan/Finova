@@ -5,8 +5,9 @@ load_dotenv()
 
 
 class Settings:
-        ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development").lower()
     """Application settings loaded from environment variables."""
+
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development").lower()
     DATABASE_URL: str = os.getenv("DATABASE_URL")
     JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY") or os.getenv("JWT_SECRET")
     JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
