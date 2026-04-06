@@ -4,3 +4,4 @@ from .membership import OrganizationMembership
 from .category import Category
 from .record import FinancialRecord
 from .refresh_token import RefreshToken
+from .notification import Notification

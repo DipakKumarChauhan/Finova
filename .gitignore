@@ -37,4 +37,14 @@ build/
 .idea/
 *.swp
 *.swo
+
+# OS and miscellaneous local files
+.DS_Store
+Thumbs.db
+
+# Python tooling
+.python-version
+
+# Notebook artifacts
+.ipynb_checkpoints/
 .DS_Store

@@ -1,63 +1,10 @@
-from datetime import datetime, timedelta, timezone
+\"\"\"\nAuthentication Service
 
-from sqlalchemy.orm import Session
+Handles user registration, authentication, and JWT token management.
 
-from app.core.config import settings
-from app.core.security import (
-    create_access_token,
-    generate_refresh_token,
-    hash_password,
-    verify_password,
-)
-from app.models.refresh_token import RefreshToken
-from app.models.user import User
+Functions:
+- register_user: Create new user account with email and password
+- authenticate_user: Validate email/password and return user if valid
+- create_tokens: Generate JWT access and refresh tokens for user
 
-
-def register_user(db: Session, email: str, password: str, name: str) -> User:
-    existing_user = db.query(User).filter(User.email == email).first()
-    if existing_user:
-        raise ValueError("Email already registered")
-
-    user = User(
-        email=email,
-        name=name,
-        password_hash=hash_password(password),
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return user
-
-
-def authenticate_user(db: Session, email: str, password: str) -> User | None:
-    user = db.query(User).filter(User.email == email).first()
-    if not user:
-        return None
-
-    if not verify_password(password, user.password_hash):
-        return None
-
-    return user
-
-
-def create_tokens(db: Session, user: User) -> tuple[str, str]:
-    access_token = create_access_token(
-        {
-            "sub": str(user.id),
-            "email": user.email,
-        }
-    )
-
-    refresh_token, token_hash = generate_refresh_token()
-
-    refresh_token_obj = RefreshToken(
-        user_id=user.id,
-        token_hash=token_hash,
-        expires_at=datetime.now(timezone.utc)
-        + timedelta(hours=settings.JWT_REFRESH_TOKEN_EXPIRE_HOURS),
-        revoked=False,
-    )
-    db.add(refresh_token_obj)
-    db.commit()
-
-    return access_token, refresh_token
+Passwords are hashed using bcrypt. JWTs are signed using JWT_SECRET_KEY.\nRefresh tokens are stored in database and tracked for revocation.\n\"\"\"\n\nfrom datetime import datetime, timedelta, timezone\n\nfrom sqlalchemy.orm import Session\n\nfrom app.core.config import settings\nfrom app.core.security import (\n    create_access_token,\n    generate_refresh_token,\n    hash_password,\n    verify_password,\n)\nfrom app.models.refresh_token import RefreshToken\nfrom app.models.user import User\n\n\ndef register_user(db: Session, email: str, password: str, name: str) -> User:\n    \"\"\"\n    Create a new user account.\n\n    Validates email is unique, hashes password, and stores user in database.\n\n    Args:\n        db: Database session\n        email: User's email address (must be unique)\n        password: User's plain-text password (will be hashed)\n        name: User's full name\n\n    Returns:\n        User object with generated UUID\n\n    Raises:\n        ValueError: if email already registered\n    \"\"\"\n\n    # Email ko unique validate karte hain\n    existing_user = db.query(User).filter(User.email == email).first()\n    if existing_user:\n        raise ValueError(\"Email already registered\")\n\n    # Password ko hash karke store karte hain\n    user = User(\n        email=email,\n        name=name,\n        password_hash=hash_password(password),\n    )\n    db.add(user)\n    db.commit()\n    db.refresh(user)\n    return user\n\n\ndef authenticate_user(db: Session, email: str, password: str) -> User | None:\n    \"\"\"\n    Validate email/password combination and return user.\n\n    Looks up user by email and verifies password hash.\n\n    Args:\n        db: Database session\n        email: User's email address\n        password: Plain-text password to verify\n\n    Returns:\n        User object if valid; None if email not found or password incorrect\n    \"\"\"\n\n    # Email se user find karte hain\n    user = db.query(User).filter(User.email == email).first()\n    if not user:\n        return None\n\n    # Password ko verify karte hain\n    if not verify_password(password, user.password_hash):\n        return None\n\n    return user\n\n\ndef create_tokens(db: Session, user: User) -> tuple[str, str]:\n    \"\"\"\n    Generate JWT access and refresh tokens for user.\n\n    Creates a short-lived access token and long-lived refresh token.\n    Refresh token hash is stored in database for revocation tracking.\n\n    Args:\n        db: Database session\n        user: User object to create tokens for\n\n    Returns:\n        tuple[str, str] of (access_token, refresh_token)\n    \"\"\"\n\n    # Access token banate hain - short-lived, user ko API calls ke liye use hota hai\n    access_token = create_access_token(\n        {\n            \"sub\": str(user.id),\n            \"email\": user.email,\n        }\n    )\n\n    # Refresh token banate hain - long-lived, nya access token lene ke liye\n    refresh_token, token_hash = generate_refresh_token()\n\n    # Refresh token ko database me store karte hain revocation track karne ke liye\n    refresh_token_obj = RefreshToken(\n        user_id=user.id,\n        token_hash=token_hash,\n        expires_at=datetime.now(timezone.utc)\n        + timedelta(hours=settings.JWT_REFRESH_TOKEN_EXPIRE_HOURS),\n        revoked=False,\n    )\n    db.add(refresh_token_obj)\n    db.commit()\n\n    return access_token, refresh_token
