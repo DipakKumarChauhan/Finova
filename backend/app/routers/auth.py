@@ -31,6 +31,7 @@ from app.services.auth_service import (
     refresh_access_token,
     revoke_refresh_token,
 )
+from app.core.config import settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
@@ -100,8 +101,8 @@ def login(data: LoginRequest, response: Response, db: Session = Depends(get_db))
         value=refresh_token,
         max_age=86400 * 2,  # 2 days
         httponly=True,
-        secure=False,  # Set to True in production with HTTPS
-        samesite="lax",
+        secure=settings.COOKIE_SECURE or settings.ENVIRONMENT == "production",
+        samesite=settings.COOKIE_SAMESITE,
     )
 
     logger.info("User logged in: %s", user.email)
@@ -157,8 +158,8 @@ def refresh_tokens(
         value=refresh_token,
         max_age=86400 * 2,  # 2 days
         httponly=True,
-        secure=False,  # Set to True in production with HTTPS
-        samesite="lax",
+        secure=settings.COOKIE_SECURE or settings.ENVIRONMENT == "production",
+        samesite=settings.COOKIE_SAMESITE,
     )
 
     return {
@@ -198,8 +199,8 @@ def logout(
     response.delete_cookie(
         key="refresh_token",
         httponly=True,
-        secure=False,
-        samesite="lax",
+        secure=settings.COOKIE_SECURE or settings.ENVIRONMENT == "production",
+        samesite=settings.COOKIE_SAMESITE,
     )
 
     return {"message": "logged out"}
