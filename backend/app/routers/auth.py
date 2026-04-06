@@ -166,12 +166,18 @@ def refresh_tokens(
         request.cookies.get("refresh_token") if request else None
     )
 
+    logger.info("Refresh token present in request body/cookie: %s", bool(refresh_token))
+    if refresh_token:
+        logger.info("Refresh token preview: %s...", refresh_token[:20])
+
     if not refresh_token:
+        logger.warning("Refresh token missing on /auth/refresh")
         raise HTTPException(status_code=401, detail="Missing refresh token")
 
     result = refresh_access_token(db, refresh_token)
 
     if not result:
+        logger.warning("Refresh token validation failed on /auth/refresh")
         raise HTTPException(status_code=401, detail="Invalid refresh token")
 
     access_token, refresh_token = result

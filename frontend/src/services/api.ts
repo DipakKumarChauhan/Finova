@@ -10,7 +10,7 @@ type RetryableConfig = {
 }
 
 // Store access token in memory only (lost on refresh, more secure from XSS)
-let accessToken: string | null = null
+let accessToken: string | null = localStorage.getItem('access_token')
 let refreshPromise: Promise<string | null> | null = null
 
 function emitSessionChange() {
@@ -19,12 +19,20 @@ function emitSessionChange() {
 
 function clearStoredSession() {
   accessToken = null
+  localStorage.removeItem('access_token')
+  localStorage.removeItem('refresh_token')
   localStorage.removeItem('auth_user_email')
   emitSessionChange()
 }
 
-  export function setAccessToken(token: string | null) {
+export function setAccessToken(token: string | null) {
   accessToken = token
+
+  if (token) {
+    localStorage.setItem('access_token', token)
+  } else {
+    localStorage.removeItem('access_token')
+  }
 }
 
 export function getAccessToken() {
@@ -32,11 +40,20 @@ export function getAccessToken() {
 }
 
 async function refreshSession() {
-  // Refresh token is in HttpOnly cookie, automatically sent with requests
-  // Use the shared client so cookies/credentials are included
-  const response = await api.post('/auth/refresh', {})
+  const refreshToken = localStorage.getItem('refresh_token')
+
+  // Send refresh token in body to avoid losing auth when third-party cookies are blocked.
+  const response = await api.post('/auth/refresh', {
+    refresh_token: refreshToken,
+  })
 
   accessToken = response.data.access_token
+  localStorage.setItem('access_token', response.data.access_token)
+
+  if (response.data.refresh_token) {
+    localStorage.setItem('refresh_token', response.data.refresh_token)
+  }
+
   emitSessionChange()
 
   return response.data.access_token as string
